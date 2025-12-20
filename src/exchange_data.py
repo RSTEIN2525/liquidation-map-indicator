@@ -1,18 +1,7 @@
 import ccxt
 import pandas as pd
 from typing import List, Any
-
-# ACTIVE_EXCHANGES = ['binance', 'kraken', 'krakenfutures', 'kucoin' 'binanceus','coinbase', 'coinbaseadvanced', 'coinbaseexchange', 'gemini', 'mexc', 'hyperliquid', 'okx', 'okxus']
-ACTIVE_EXCHANGES = ['binance', 'bybit', 'okx', 'hyperliquid']
-SYMBOLS = [
-    'BTC/USDT:USDT',   # Binance
-    'BTCUSDT',         # Bybit
-    'BTC-USDT-SWAP',   # OKX
-    'BTC-PERP',        # Common Perp Format
-    'BTC/USDC:USDC',   # Hyperliquid
-]
-TIMEFRAME = '1h'
-LOOKBACK = 7
+from .config import ACTIVE_EXCHANGES, TIMEFRAME, LOOKBACK, SYMBOLS
 
 def fetch_single_exchange_data(exchange: Any) -> pd.DataFrame | None:
 
@@ -188,17 +177,11 @@ def fetch_data()->pd.DataFrame:
     combined_df = pd.concat(all_df, ignore_index=True)
     combined_df = combined_df.sort_values('timestamp').reset_index(drop=True)
 
+    # Fill historical gaps with current (especially Hyperliquid)
+    combined_df['oi_usd_hist'] = combined_df['oi_usd_hist'].fillna(combined_df['oi_usd_current'])
+
+    # Calculate OI delta per exchange
+    combined_df = combined_df.sort_values(['exchange', 'timestamp'])
+    combined_df['oi_delta'] = combined_df.groupby('exchange')['oi_usd_hist'].diff()
+
     return combined_df
-
-
-
-def main():
-   
-    df = fetch_data()
-    print(df)        
-
-
-
-
-if __name__ == '__main__':
-    main()

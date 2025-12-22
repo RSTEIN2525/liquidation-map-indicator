@@ -18,6 +18,8 @@ class Entry:
     side: Side
     price: float
     weight: float
+    start_time: pd.Timestamp = None  # Time of Entering
+    end_time: pd.Timestamp = None   # Time of Wiped Out By Liquidation
 
 
 '''
@@ -27,9 +29,10 @@ WE USE THREE PROXIES TO GUAGE ENTRY:
 -> VWAP: Used in choppy markets without a clear trend that would Implie LONG || SHORT
 '''
 
+
 def get_summary_stats(df: pd.DataFrame) -> dict:
     agg_df = aggregate_market_view(df)
-    
+
     # SAFETY: Check if empty first
     if agg_df.empty:
         return {"cur_price": 0.0, "total_oi_usd": 0.0}
@@ -38,14 +41,21 @@ def get_summary_stats(df: pd.DataFrame) -> dict:
     latest = agg_df.iloc[-1]
 
     return {
-        "cur_price": latest['close'], 
-        "total_oi_usd": latest['oi_usd_current']
+        "cur_price": latest['close'],
+        "total_oi_usd": latest['oi_usd_current'],
+        "funding_rate": latest['funding_rate'],
+        "high": agg_df['close'].max(),
+        "low": agg_df['close'].min(),
     }
+
 
 def aggregate_market_view(df: pd.DataFrame):
     agg_df = df.groupby('timestamp').agg({
         'close': 'mean',
-        'volume': 'sum',       
+        'high': 'max',
+        'low': 'min',
+        'funding_rate': 'mean',
+        'volume': 'sum',
         'volume_usd': 'sum',
         'oi_usd_hist': 'sum',
         'oi_usd_current': 'sum'
@@ -65,7 +75,8 @@ def detect_hotzones(df: pd.DataFrame) -> List[Entry]:
 
     VOLUME_QUANTILE = df['volume_usd'].quantile(VOL_MASK)  # top 20% volume
     PRICE_THRESHOLD = PRICE_MASK  # 0.8% move
-    OI_DELTA_QUANTILE = df['oi_delta'].abs().quantile(DELTA_MASK)  # top 30% move
+    OI_DELTA_QUANTILE = df['oi_delta'].abs().quantile(
+        DELTA_MASK)  # top 30% move
 
     # Masks for a likely long entry
     long_conditions = (
@@ -90,8 +101,13 @@ def detect_hotzones(df: pd.DataFrame) -> List[Entry]:
         entry_price = (
             long_period['close'] * long_period['volume']).sum() / long_period['volume'].sum()
         raw_weight = max(long_period['oi_delta'].sum(), 0)
+
+        # Times
+        start_time = long_period['timestamp'].min()
+        end_time = long_period['timestamp'].max()
+
         entries.append(
-            Entry(side=Side.LONG, price=entry_price, weight=raw_weight))
+            Entry(side=Side.LONG, price=entry_price, weight=raw_weight, start_time=start_time, end_time=end_time))
 
     # Group For Consecutive True Short Periods
     df['short_group'] = (short_conditions != short_conditions.shift()).cumsum()
@@ -103,8 +119,13 @@ def detect_hotzones(df: pd.DataFrame) -> List[Entry]:
         entry_price = (
             short_period['close'] * short_period['volume']).sum() / short_period['volume'].sum()
         raw_weight = max(short_period['oi_delta'].sum(), 0)
+        
+         # Times
+        start_time = short_period['timestamp'].min()
+        end_time = short_period['timestamp'].max()
+
         entries.append(
-            Entry(side=Side.SHORT, price=entry_price, weight=raw_weight))
+            Entry(side=Side.SHORT, price=entry_price, weight=raw_weight, start_time=start_time, end_time=end_time))
 
     # Normalize
     if entries:
@@ -154,8 +175,13 @@ def detect_high_vol_and_oi_spike(df: pd.DataFrame) -> List[Entry]:
         entry_price = (
             long_period['close'] * long_period['volume']).sum() / long_period['volume'].sum()
         raw_weight = max(long_period['volume_usd'].sum(), 0)
+
+        # Times
+        start_time = long_period['timestamp'].min()
+        end_time = long_period['timestamp'].max()
+
         entries.append(
-            Entry(side=Side.LONG, price=entry_price, weight=raw_weight))
+            Entry(side=Side.LONG, price=entry_price, weight=raw_weight, start_time=start_time, end_time=end_time))
 
     # Group For Consecutive True Short Periods
     df['short_group'] = (short_conditions != short_conditions.shift()).cumsum()
@@ -167,9 +193,14 @@ def detect_high_vol_and_oi_spike(df: pd.DataFrame) -> List[Entry]:
         entry_price = (
             short_period['close'] * short_period['volume']).sum() / short_period['volume'].sum()
         raw_weight = max(short_period['volume_usd'].sum(), 0)
+
+        # Times
+        start_time = short_period['timestamp'].min()
+        end_time = short_period['timestamp'].max()
+
         entries.append(
-            Entry(side=Side.SHORT, price=entry_price, weight=raw_weight))
-    
+            Entry(side=Side.SHORT, price=entry_price, weight=raw_weight, start_time=start_time, end_time=end_time))
+
     if entries:
         total_weight = sum(e.weight for e in entries)
         if total_weight > 0:
@@ -202,8 +233,11 @@ def detect_vwap(df: pd.DataFrame) -> List[Entry]:
     # Aggregate All Candle Turnovers, and Divide by Total Volume to Vol. Weighted. Price
     vwap_price = df['candle_turnover'].sum() / df['volume'].sum()
 
+    start_time = df['timestamp'].min()
+    end_time = df['timestamp'].max()
+
     # Only One Entry, So 1.0 Weight
-    return [Entry(side=Side.NEUTRAL, price=vwap_price, weight=1.0)]
+    return [Entry(side=Side.NEUTRAL, price=vwap_price, weight=1.0, start_time=start_time, end_time=end_time)]
 
 
 def scale_entries(entries: List[Entry], method_weight: float):

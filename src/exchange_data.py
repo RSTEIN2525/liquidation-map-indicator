@@ -67,7 +67,7 @@ def fetch_single_exchange_data(exchange: Any) -> pd.DataFrame | None:
             columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
         )
         df['volume_usd'] = df['volume'] * df['close']
-        df = df[['timestamp', 'close', 'volume', 'volume_usd']].copy()
+        df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'volume_usd']].copy()
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
 
         # Add static/current fields

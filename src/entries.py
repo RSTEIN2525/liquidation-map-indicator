@@ -2,24 +2,8 @@ import ccxt
 import pandas as pd
 from typing import List, Any
 from .config import WEIGHT_VOLUME_OI, WEIGHT_HOTZONE, WEIGHT_VWAP, VOL_MASK, DELTA_MASK, PRICE_MASK
-from dataclasses import dataclass
-from enum import Enum
+from .models import Side, Entry
 import math
-
-
-class Side(Enum):
-    LONG = "LONG"
-    SHORT = "SHORT"
-    NEUTRAL = "NEUTRAL"
-
-
-@dataclass
-class Entry:
-    side: Side
-    price: float
-    weight: float
-    start_time: pd.Timestamp = None  # Time of Entering
-    end_time: pd.Timestamp = None   # Time of Wiped Out By Liquidation
 
 
 '''

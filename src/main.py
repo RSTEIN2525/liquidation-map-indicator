@@ -1,17 +1,9 @@
 from .exchange_data import fetch_data
-from .entries import estimate_entries, Entry, get_summary_stats, aggregate_market_view
+from .entries import estimate_entries, get_summary_stats, aggregate_market_view
 from typing import List
 from .liquidation_price import fetch_liquidation_levels, render_bins
-from dataclasses import dataclass
-
-
-@dataclass
-class SummaryStats:
-    total_oi_usd: float
-    close: float
-    funding_rate: float
-    high: float
-    low: float
+from .resolution import calculate_magnetism
+from .models import SummaryStats, Direction, Entry
 
 
 def main():
@@ -29,17 +21,28 @@ def main():
                                  low=recieved.get("low"))
 
     # Get My LVLs Binned
-    bins = fetch_liquidation_levels(
-        entries, 
-        "dynamic", 
-        summary_stats.total_oi_usd, 
-        summary_stats.close, 
+    bins, raw_liqs = fetch_liquidation_levels(
+        entries,
+        "dynamic",
+        summary_stats.total_oi_usd,
+        summary_stats.close,
         summary_stats.funding_rate,
         agg_df
     )
 
+    # Pass the raw points into magnetism
+    bias, upward_mag, downward_mag = calculate_magnetism(
+        summary_stats.close, raw_liqs)
+
+    direction = Direction(
+        bias=bias,
+        upward_mag=upward_mag,
+        downward_mag=downward_mag
+    )
+
     # Render
-    render_bins(bins, summary_stats.close, summary_stats.total_oi_usd)
+    render_bins(bins, summary_stats.close,
+                summary_stats.total_oi_usd, direction)
 
 
 if __name__ == '__main__':

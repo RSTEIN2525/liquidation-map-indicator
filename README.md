@@ -1,13 +1,13 @@
-# 🌊 Liquidation Map Indicator API
+# Liquidation Map Indicator API
 <img width="727" height="444" alt="Screenshot 2025-12-22 at 7 30 23 PM" src="https://github.com/user-attachments/assets/40ab8e5a-cce9-4a3d-87c4-ffddd77f2469" />
 
 A high-performance data aggregation engine that predicts and visualizes "Liquidation Cascades" in the crypto futures market. By analyzing real-time data from multiple exchanges, this tool identifies price zones where leveraged positions are most likely to be wiped out, creating a "gravity" effect on price.
 
-🚀 **Live API:** [https://liquidation-api-1001101479084.asia-east1.run.app/api/liquidation-map](https://liquidation-api-1001101479084.asia-east1.run.app/api/liquidation-map)
+**Live API:** [https://liquidation-api-1001101479084.asia-east1.run.app/api/liquidation-map](https://liquidation-api-1001101479084.asia-east1.run.app/api/liquidation-map)
 
 ---
 
-## 🎯 Project Goal
+## Project Goal
 The goal of this project is to democratize institutional-grade market sentiment analysis. While retail traders often focus on simple indicators, whales and market makers focus on **liquidity**. This tool maps out hypothetical liquidation clusters to show:
 1.  **Magnetism**: Price levels that "pull" the market toward them.
 2.  **Directional Bias**: Whether the path of least resistance is Up or Down.
@@ -15,7 +15,7 @@ The goal of this project is to democratize institutional-grade market sentiment 
 
 ---
 
-## 🧠 Methodology
+## Methodology
 The engine follows a proprietary 6-step pipeline to infer hidden market data:
 
 ### 1. Infer Entry Prices
@@ -52,7 +52,7 @@ This provides a single numeric value indicating if the market is being pulled to
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 -   **Backend**: Python / FastAPI
 -   **Data Processing**: Pandas / NumPy
 -   **Exchange Connectivity**: CCXT (Unified API for 100+ exchanges)
@@ -61,7 +61,7 @@ This provides a single numeric value indicating if the market is being pulled to
 
 ---
 
-## 🚀 API Endpoints
+## API Endpoints
 
 ### `GET /api/status`
 Returns the current state of the global cache (`INITIALIZING`, `READY`, or `ERROR`).
@@ -74,7 +74,7 @@ Returns the full DTO (Data Transfer Object) including:
 
 ---
 
-## 💻 Local Development
+## Local Development
 
 1. **Install Dependencies**:
 ```bash

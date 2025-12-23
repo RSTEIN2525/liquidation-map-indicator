@@ -2,5 +2,8 @@ ccxt
 pandas
 numpy
 requests
-
-
+fastapi
+pydantic
+apscheduler
+uvicorn
+google-cloud-storage

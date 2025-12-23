@@ -1,4 +1,5 @@
 # 🌊 Liquidation Map Indicator API
+<img width="727" height="444" alt="Screenshot 2025-12-22 at 7 30 23 PM" src="https://github.com/user-attachments/assets/40ab8e5a-cce9-4a3d-87c4-ffddd77f2469" />
 
 A high-performance data aggregation engine that predicts and visualizes "Liquidation Cascades" in the crypto futures market. By analyzing real-time data from multiple exchanges, this tool identifies price zones where leveraged positions are most likely to be wiped out, creating a "gravity" effect on price.
 

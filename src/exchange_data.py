@@ -1,9 +1,25 @@
 import ccxt
 import pandas as pd
-from typing import List, Any
+from typing import List, Any, Optional
 from .config import ACTIVE_EXCHANGES, TIMEFRAME, LOOKBACK, SYMBOLS
 
-def fetch_single_exchange_data(exchange: Any) -> pd.DataFrame | None:
+def fetch_single_exchange_data(
+    exchange: Any, 
+    symbols: Optional[List[str]] = None,
+    lookback: Optional[int] = None
+) -> pd.DataFrame | None:
+    """
+    Fetch data from a single exchange.
+    
+    Args:
+        exchange: CCXT exchange instance
+        symbols: Optional list of symbols to try. If None, uses global SYMBOLS
+        lookback: Optional lookback in hours. If None, uses global LOOKBACK
+    """
+    if symbols is None:
+        symbols = SYMBOLS
+    if lookback is None:
+        lookback = LOOKBACK
 
     # Aggregator that Carries Each Applicable Pair (If Multiple)
     all_symbols: List[pd.DataFrame] = []
@@ -15,7 +31,7 @@ def fetch_single_exchange_data(exchange: Any) -> pd.DataFrame | None:
 
         # Try multiple possible symbols until one works
         valid_symbol = None
-        for sym_candidate in SYMBOLS:
+        for sym_candidate in symbols:
             if sym_candidate in markets:
                 valid_symbol = sym_candidate
                 break
@@ -29,10 +45,10 @@ def fetch_single_exchange_data(exchange: Any) -> pd.DataFrame | None:
         symbol = valid_symbol
 
         # Core Data That Will Be Duplicated Across Timestamps (1/T.F. Metric)
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=LOOKBACK) # Open, High, Low, Close, Volume
-        funding = exchange.fetch_funding_rate(symbol)                             # Funding Rate
-        current_oi = exchange.fetch_open_interest(symbol)                         # Open Interest
-        ticker = exchange.fetch_ticker(symbol)                                    # Real-Time Ticker Data
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=lookback) # Open, High, Low, Close, Volume
+        funding = exchange.fetch_funding_rate(symbol)                              # Funding Rate
+        current_oi = exchange.fetch_open_interest(symbol)                          # Open Interest
+        ticker = exchange.fetch_ticker(symbol)                                     # Real-Time Ticker Data
 
         # Gets Current Price For Ticker Via: {markPrice -> last -> close -> OHLCV close}
         current_price = (
@@ -54,7 +70,7 @@ def fetch_single_exchange_data(exchange: Any) -> pd.DataFrame | None:
             try:
                 # Pull OI History overy tf, lookback
                 oi_history = exchange.fetch_open_interest_history(
-                    symbol, timeframe=TIMEFRAME, limit=LOOKBACK
+                    symbol, timeframe=TIMEFRAME, limit=lookback
                 )
 
             # Base CCXT API Failed    
@@ -97,20 +113,20 @@ def fetch_single_exchange_data(exchange: Any) -> pd.DataFrame | None:
 
             # Try: explicit USD Value (CCXT Standard API)
             if 'openInterestValue' in oi_df.columns:
-                 oi_df['oi_usd_hist'] = oi_df['oi_usd_hist'].fillna(oi_df['openInterestValue'])
+                 oi_df['oi_usd_hist'] = oi_df['oi_usd_hist'].fillna(oi_df['openInterestValue']).infer_objects(copy=False)
             
             # Try: explicit USD Value (Binance variant)
             if 'openInterestUSD' in oi_df.columns:
-                 oi_df['oi_usd_hist'] = oi_df['oi_usd_hist'].fillna(oi_df['openInterestUSD'])
+                 oi_df['oi_usd_hist'] = oi_df['oi_usd_hist'].fillna(oi_df['openInterestUSD']).infer_objects(copy=False)
 
             # Fallback: Calculate from Contracts/Amount * Price (Bybit, OKX)
             if 'openInterestAmount' in oi_df.columns:
                 calculated_oi = oi_df['openInterestAmount'] * current_price
-                oi_df['oi_usd_hist'] = oi_df['oi_usd_hist'].fillna(calculated_oi)
+                oi_df['oi_usd_hist'] = oi_df['oi_usd_hist'].fillna(calculated_oi).infer_objects(copy=False)
             
             elif 'openInterest' in oi_df.columns: # try generic key 'openInterest'
                 calculated_oi = oi_df['openInterest'] * current_price
-                oi_df['oi_usd_hist'] = oi_df['oi_usd_hist'].fillna(calculated_oi)
+                oi_df['oi_usd_hist'] = oi_df['oi_usd_hist'].fillna(calculated_oi).infer_objects(copy=False)
 
             # Cleanup
             if 'oi_usd_hist' in oi_df.columns:
@@ -143,35 +159,70 @@ def fetch_single_exchange_data(exchange: Any) -> pd.DataFrame | None:
         # traceback.print_exc() # Uncomment for deep debugging
         return None
             
-def get_exchanges()->List[ccxt.Exchange]:
-     # initialize exchanges
+def get_exchanges(exchange_list: Optional[List[str]] = None)->List[ccxt.Exchange]:
+    """
+    Initialize exchange objects.
+    
+    Args:
+        exchange_list: Optional list of exchange IDs. If None, uses ACTIVE_EXCHANGES
+    """
+    if exchange_list is None:
+        exchange_list = ACTIVE_EXCHANGES
+        
+    # initialize exchanges
     exchanges: List[ccxt.Exchange] = []
 
     # Create Exchange Object From Each Active
-    for exchange_id in ACTIVE_EXCHANGES:
-        
-        # Create Exchange Object From ID
-        exchange_class = getattr(ccxt, exchange_id)
-
-        # Append to List
-        exchanges.append(exchange_class())
+    for exchange_id in exchange_list:
+        try:
+            # Create Exchange Object From ID
+            exchange_class = getattr(ccxt, exchange_id)
+            # Append to List
+            exchanges.append(exchange_class())
+        except AttributeError:
+            print(f"⚠️ Exchange '{exchange_id}' not found in CCXT")
     
     return exchanges
 
-def fetch_data()->pd.DataFrame:
-     # Get Exchanges
-    exchanges:List[ccxt.Exchange] = get_exchanges()
+def fetch_data(
+    ticker: Optional[str] = None,
+    exchanges: Optional[List[str]] = None,
+    lookback: Optional[int] = None
+)->pd.DataFrame:
+    """
+    Fetch data from multiple exchanges.
+    
+    Args:
+        ticker: Optional ticker symbol (e.g., 'BTC'). If None, uses config default
+        exchanges: Optional list of exchange IDs. If None, uses ACTIVE_EXCHANGES
+        lookback: Optional lookback in hours. If None, uses LOOKBACK from config
+    """
+    from .config import get_symbols_for_ticker
+    
+    # Use defaults if not provided
+    if ticker:
+        symbols = get_symbols_for_ticker(ticker)
+    else:
+        symbols = SYMBOLS
+    
+    # Get Exchanges
+    exchange_objects:List[ccxt.Exchange] = get_exchanges(exchanges)
 
     # List of DF
     all_df: List[pd.DataFrame] = []
 
-    for ex in exchanges:
+    for ex in exchange_objects:
         
         # Fetch All Symbols (USDT/USDC/USD) For Single Exchange
-        df = fetch_single_exchange_data(ex)
+        df = fetch_single_exchange_data(ex, symbols=symbols, lookback=lookback)
 
-        # Push to Aggregator
-        all_df.append(df)
+        # Only append if data was successfully fetched
+        if df is not None and not df.empty:
+            all_df.append(df)
+
+    # Ensure we have at least some data
+    if not all_df:
+        raise ValueError("No data fetched from any exchange. Check exchange availability and symbols.")
 
     # Combine All Exchanges Df (Ordered By Timestamp)
     combined_df = pd.concat(all_df, ignore_index=True)

@@ -1,15 +1,28 @@
 from .exchange_data import fetch_data
 from .entries import estimate_entries, get_summary_stats, aggregate_market_view
-from typing import List
+from typing import List, Optional
 from .liquidation_price import fetch_liquidation_levels, render_bins
 from .resolution import calculate_magnetism
 from .models import SummaryStats, Direction, Entry
 import pandas as pd
+import ccxt
 
 
-def main():
-
-    df = fetch_data()
+def main(ticker: Optional[str] = None, exchanges: Optional[List[str]] = None, lookback_days: Optional[float] = None):
+    """
+    Main function with optional parameters for custom analysis.
+    
+    Args:
+        ticker: Ticker symbol (e.g., 'BTC')
+        exchanges: List of exchange IDs to use
+        lookback_days: Number of days to look back
+    """
+    from .config import get_lookback_hours
+    
+    # Convert days to hours if provided
+    lookback_hours = get_lookback_hours(lookback_days) if lookback_days else None
+    
+    df = fetch_data(ticker=ticker, exchanges=exchanges, lookback=lookback_hours)
     agg_df = aggregate_market_view(df)
     entries: List[Entry] = estimate_entries(df)
 
@@ -46,11 +59,25 @@ def main():
                 summary_stats.total_oi_usd, direction)
 
 
-def calculate_map_data():
+def calculate_map_data(
+    ticker: Optional[str] = None,
+    exchanges: Optional[List[str]] = None,
+    lookback_days: Optional[float] = None
+):
     """
     This function does the heavy lifting but returns DATA, not text.
+    
+    Args:
+        ticker: Optional ticker symbol (e.g., 'BTC', 'ETH')
+        exchanges: Optional list of exchange IDs
+        lookback_days: Optional lookback period in days
     """
-    df = fetch_data()
+    from .config import get_lookback_hours
+    
+    # Convert days to hours if provided
+    lookback_hours = get_lookback_hours(lookback_days) if lookback_days else None
+    
+    df = fetch_data(ticker=ticker, exchanges=exchanges, lookback=lookback_hours)
     agg_df = aggregate_market_view(df)
     entries = estimate_entries(df)
 
@@ -82,10 +109,12 @@ def calculate_map_data():
     return {
         "summary": summary_stats,
         "direction": direction,
-        "bins": bins, # This is a DataFrame, we need to convert it later
+        "bins": bins,           # DataFrame of binned/bucketed data
+        "raw_liqs": raw_liqs,   # DataFrame of individual liquidation points
         "generated_at": pd.Timestamp.now()
     }
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    print(ccxt.exchanges)

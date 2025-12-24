@@ -1,3 +1,4 @@
 TODO.md
 .env
 src/__pycache__
+deploy/deploy.sh

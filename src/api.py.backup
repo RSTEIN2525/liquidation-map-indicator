@@ -218,7 +218,7 @@ def update_cache():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Check if cache exists in GCS
+    # 1. Check if cache exists in GCS
     print("🚀 Application startup...")
     cached_data = load_from_gcs()
     if cached_data:
@@ -226,14 +226,24 @@ async def lifespan(app: FastAPI):
         print("✅ Found existing cache in GCS")
     else:
         CACHE_STATUS["status"] = CacheStatus.INITIALIZING
-        print("⚠️ No cache found. Use /api/admin/update to initialize.")
-    
-    print("⏰ Cloud Scheduler will handle hourly updates via /api/admin/update")
+        print("⚠️ No cache found, will initialize in background")
+
+    # 2. Setup Background Scheduler for regular updates
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(update_cache, 'interval', hours=1)
+    scheduler.start()
+    print("⏰ Scheduler started (updates every 1 hour)")
+
+    # 3. Run initial update in background (if no cache or to refresh)
+    thread = threading.Thread(target=update_cache, daemon=True)
+    thread.start()
+    print("🔄 Background update started")
 
     yield
 
     # On Shutdown
-    print("🛑 Application shutdown complete.")
+    print("🛑 Shutting down scheduler...")
+    scheduler.shutdown()
 
 # Define APP
 app = FastAPI(lifespan=lifespan)

@@ -64,16 +64,16 @@ def detect_hotzones(df: pd.DataFrame) -> List[Entry]:
 
     # Masks for a likely long entry
     long_conditions = (
-        (df['price_return'] > PRICE_THRESHOLD) &
-        (df['oi_delta'] > OI_DELTA_QUANTILE) &
-        (df['volume_usd'] > VOLUME_QUANTILE))
-
+    (df['price_return'] > PRICE_THRESHOLD) &
+    (df['oi_delta'] > OI_DELTA_QUANTILE) &
+    (df['volume_usd'] > VOLUME_QUANTILE))
+    
     # Masks for a likely short entry
     short_conditions = (
-        (df['price_return'] < -PRICE_THRESHOLD) &   # price DOWN
+    (df['price_return'] < -PRICE_THRESHOLD) &   # price DOWN
         # OI still INCREASING (new shorts)
         (df['oi_delta'] > OI_DELTA_QUANTILE) &
-        (df['volume_usd'] > VOLUME_QUANTILE))
+    (df['volume_usd'] > VOLUME_QUANTILE))
 
     # Group For Consecutive True Long Periods
     df['long_group'] = (long_conditions != long_conditions.shift()).cumsum()
@@ -92,14 +92,14 @@ def detect_hotzones(df: pd.DataFrame) -> List[Entry]:
 
         entries.append(
             Entry(side=Side.LONG, price=entry_price, weight=raw_weight, start_time=start_time, end_time=end_time))
-
+    
     # Group For Consecutive True Short Periods
     df['short_group'] = (short_conditions != short_conditions.shift()).cumsum()
     hot_short_periods = df[short_conditions].groupby('short_group')
 
     # Append Shorts
     for _, short_period in hot_short_periods:
-
+        
         entry_price = (
             short_period['close'] * short_period['volume']).sum() / short_period['volume'].sum()
         raw_weight = max(short_period['oi_delta'].sum(), 0)
@@ -110,7 +110,7 @@ def detect_hotzones(df: pd.DataFrame) -> List[Entry]:
 
         entries.append(
             Entry(side=Side.SHORT, price=entry_price, weight=raw_weight, start_time=start_time, end_time=end_time))
-
+    
     # Normalize
     if entries:
         total_weight = sum(e.weight for e in entries)
@@ -199,7 +199,7 @@ def detect_high_vol_and_oi_spike(df: pd.DataFrame) -> List[Entry]:
     # Clean Up Columns
     df.drop(columns=['long_group', 'short_group'],
             errors='ignore', inplace=True)
-
+    
     return entries
 
 # TODO: No Such Thing as Neutral Leverage always in {LONG< SHORT}, We could CMP w/ a MA as a trend Proxy, if broad +, LONG | if broad -, SHORT
@@ -266,3 +266,4 @@ def estimate_entries(input: pd.DataFrame) -> List[Entry]:
             e.weight /= total
 
     return entry_book
+    

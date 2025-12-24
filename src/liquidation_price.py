@@ -1,5 +1,12 @@
-from .config import LEVERAGE_DISTRIBUTIONS, LEVERAGE_TIERS,  TOTAL_BUFFER, NUM_BUCKETS
-from typing import List
+from .config import (
+    LEVERAGE_PROFILES, 
+    NUM_LEVERAGE_SAMPLES,
+    MIN_LEVERAGE,
+    MAX_LEVERAGE,
+    TOTAL_BUFFER, 
+    NUM_BUCKETS
+)
+from typing import List, Tuple
 from .models import Side, Entry, Status, Liquidation, Direction
 import pandas as pd
 import random
@@ -7,36 +14,62 @@ import numpy as np
 
 from . import entries
 
-# Get Weights From Config Helper
 
-
-def get_leverage_distribution(profile: str = "neutral", funding_rate: float = 0.0) -> List[float]:
-
+def sample_leverages(
+    profile: str = "neutral", 
+    funding_rate: float = 0.0, 
+    num_samples: int = None
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Sample leverages from a continuous normal distribution with probability weights.
+    
+    This creates smooth, realistic liquidation gradients with proper USD allocation
+    based on how likely each leverage is to be used.
+    
+    Args:
+        profile: 'conservative', 'neutral', 'aggressive', or 'dynamic'
+        funding_rate: Current funding rate (used for dynamic adjustment)
+        num_samples: Number of samples to generate (defaults to NUM_LEVERAGE_SAMPLES)
+    
+    Returns:
+        Tuple of (leverages, weights) where:
+        - leverages: Array of leverage values between MIN_LEVERAGE and MAX_LEVERAGE
+        - weights: Probability weights (sum to 1.0) based on normal distribution density
+    """
+    if num_samples is None:
+        num_samples = NUM_LEVERAGE_SAMPLES
+    
+    # Dynamic profile adjusts based on funding rate
     if profile == "dynamic":
-
-        # Base = Neutral (We'll Scale Based on Funding Rate)
-        weights = LEVERAGE_DISTRIBUTIONS["neutral"].copy()
-
-        # Guage Aggression
-        aggressiveness = abs(funding_rate) * 10000  # (0.0003 -> 3.0)
-        aggressiveness = min(aggressiveness, 2.0)  # Cap @ 2.0
-
-        # Shift weights toward higher leverage
-        for i in range(len(weights)):
-
-            # Higher i = higher leverage tier
-            # more shift to high tiers
-            shift_factor = (i / (len(weights) - 1)) ** 1.5
-            weights[i] *= (1 + aggressiveness * shift_factor * 0.5)
-
-        # Re-normalize
-        total = sum(weights)
-        weights = [w / total for w in weights]
-
-        return weights
-
+        # High funding = market is hot = traders use higher leverage
+        aggressiveness = min(abs(funding_rate) * 10000, 2.0)  # 0.0003 -> 3.0, cap at 2.0
+        
+        mean = 25.0 + (aggressiveness * 30.0)  # 25x -> 85x as funding increases
+        std = 15.0 - (aggressiveness * 5.0)    # 15 -> 5 (tighter distribution at high funding)
+        
     else:
-        return LEVERAGE_DISTRIBUTIONS.get(profile, LEVERAGE_DISTRIBUTIONS["neutral"])
+        # Use predefined profile
+        params = LEVERAGE_PROFILES.get(profile, LEVERAGE_PROFILES["neutral"])
+        mean = params["mean"]
+        std = params["std"]
+    
+    # Sample from normal distribution
+    leverages = np.random.normal(mean, std, num_samples)
+    
+    # Clip to realistic bounds
+    leverages = np.clip(leverages, MIN_LEVERAGE, MAX_LEVERAGE)
+    
+    # Calculate probability density for each leverage using numpy
+    # PDF of normal distribution: (1 / (σ√(2π))) * e^(-((x-μ)²)/(2σ²))
+    # This ensures leverages near the mean get more USD allocation
+    coefficient = 1.0 / (std * np.sqrt(2 * np.pi))
+    exponent = -((leverages - mean) ** 2) / (2 * std ** 2)
+    pdf_values = coefficient * np.exp(exponent)
+    
+    # Normalize to sum to 1.0
+    weights = pdf_values / pdf_values.sum()
+    
+    return leverages, weights
 
 
 def get_liq(entry_price: float, leverage: int, is_long: bool) -> float:
@@ -53,26 +86,25 @@ def fetch_liquidation_levels(entries: List[Entry], distribution: str, total_oi_u
     # Will Store All Price Liq Lvls
     liquidations: List[Liquidation] = []
 
-    leverage_distribution = get_leverage_distribution(
-        profile=distribution, funding_rate=funding_rate)
+    # Sample continuous leverages with probability weights
+    # Leverages near the mean get higher weights (more USD allocation)
+    leverages, weights = sample_leverages(profile=distribution, funding_rate=funding_rate)
 
     for entry in entries:
-        for leverage, probability in zip(LEVERAGE_TIERS, leverage_distribution):
-
-            # Associated LEVERAGE has 0 PROB.
-            if probability == 0:
-                continue
-
-            # Randomly assign neutral to long/short liq direction
-            if entry.side == Side.NEUTRAL:
-                is_long_liq = random.random() < 0.5
-            else:
-                is_long_liq = (entry.side == Side.LONG)
-
+        # Determine direction for this entry
+        if entry.side == Side.NEUTRAL:
+            is_long_liq = random.random() < 0.5
+        else:
+            is_long_liq = (entry.side == Side.LONG)
+        
+        side_str = 'long' if is_long_liq else 'short'
+        
+        # Create liquidation point for each sampled leverage
+        # USD allocation is weighted by probability (common leverages get more USD)
+        for leverage, weight in zip(leverages, weights):
             liq_price = get_liq(entry.price, leverage, is_long_liq)
-            usd = entry.weight * probability * total_oi_usd
-            side_str = 'long' if is_long_liq else 'short'
-
+            usd = entry.weight * weight * total_oi_usd  # Weight varies by leverage probability!
+            
             liquidations.append(Liquidation(
                 liq_price=liq_price,
                 amnt_usd_liq=usd,

@@ -61,10 +61,19 @@ class BinData(BaseModel):
     intensity: float
     status: Status
 
+class RawLiquidation(BaseModel):
+    """Individual liquidation point for granular frontend visualization"""
+    price: float
+    usd: float
+    side: str  # 'long' or 'short'
+    status: Status
+    entry_time: Optional[float] = None  # Unix timestamp
+
 class LiquidationMapResponse(BaseModel):
     summary: SummaryStats
     direction: Direction
     bins: List[BinData]
+    raw_liquidations: Optional[List[RawLiquidation]] = None
     timestamp: float
 
 

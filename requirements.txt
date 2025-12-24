@@ -7,3 +7,4 @@ pydantic
 apscheduler
 uvicorn
 google-cloud-storage
+supabase
